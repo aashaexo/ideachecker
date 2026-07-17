@@ -219,7 +219,7 @@
   <div class="card">
     <textarea id="idea" placeholder="Describe your startup or business idea… e.g. 'A subscription service that delivers pre-portioned meal kits for people with specific food allergies.'"></textarea>
     <div class="row">
-      <span class="hint">Live web research: competitors, funding, difficulty</span>
+      <span class="hint" id="hint">Live web research: competitors, funding, difficulty</span>
       <button id="check">Check my idea</button>
     </div>
     <div id="progress">🔎 Researching the market — finding competitors, funding rounds, and sizing up difficulty. This can take a minute or two…</div>
@@ -408,8 +408,24 @@
       btn.disabled = false;
       btn.textContent = "Check my idea";
       $("progress").classList.remove("visible");
+      refreshBudget();
     }
   }
+
+  async function refreshBudget() {
+    try {
+      const res = await fetch("/api/budget");
+      const b = await res.json();
+      if (b.live) {
+        $("hint").textContent =
+          `Budget: $${b.spent_usd.toFixed(2)} of $${b.limit_usd.toFixed(2)} used` +
+          (b.remaining_usd <= 0 ? " — cap reached" : "");
+      }
+    } catch {
+      /* budget display is best-effort */
+    }
+  }
+  refreshBudget();
 
   $("check").addEventListener("click", check);
   $("idea").addEventListener("keydown", (e) => {

@@ -1,5 +1,6 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
@@ -12,6 +13,63 @@ const hasApiKey = Boolean(
   process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
 );
 const client = hasApiKey ? new Anthropic() : null;
+
+// ---------------------------------------------------------------------------
+// Budget guard — hard cap on cumulative API spend, persisted across restarts.
+// Once the cap is reached, live analyses are refused until the budget is
+// raised (IDEACHECKER_BUDGET_USD) or budget.json is deleted.
+// ---------------------------------------------------------------------------
+
+const BUDGET_USD = Number(process.env.IDEACHECKER_BUDGET_USD || 4);
+const BUDGET_FILE = path.join(here, "budget.json");
+
+// Per-million-token pricing for claude-opus-4-8; web search is $10 per 1,000
+// searches. Web fetch has no per-request fee (tokens only).
+const PRICE = {
+  inputPerM: 5,
+  outputPerM: 25,
+  cacheWritePerM: 6.25,
+  cacheReadPerM: 0.5,
+  perWebSearch: 0.01,
+};
+
+function loadSpent() {
+  try {
+    return Number(JSON.parse(readFileSync(BUDGET_FILE, "utf8")).spentUsd) || 0;
+  } catch {
+    return 0;
+  }
+}
+let spentUsd = loadSpent();
+
+function recordUsage(usage) {
+  if (!usage) return;
+  const cost =
+    ((usage.input_tokens || 0) * PRICE.inputPerM +
+      (usage.output_tokens || 0) * PRICE.outputPerM +
+      (usage.cache_creation_input_tokens || 0) * PRICE.cacheWritePerM +
+      (usage.cache_read_input_tokens || 0) * PRICE.cacheReadPerM) /
+      1_000_000 +
+    (usage.server_tool_use?.web_search_requests || 0) * PRICE.perWebSearch;
+  spentUsd += cost;
+  try {
+    writeFileSync(BUDGET_FILE, JSON.stringify({ spentUsd }, null, 2));
+  } catch (err) {
+    console.error("could not persist budget:", err);
+  }
+}
+
+function assertBudget() {
+  if (spentUsd >= BUDGET_USD) {
+    throw Object.assign(
+      new Error(
+        `Budget cap reached ($${spentUsd.toFixed(2)} of $${BUDGET_USD.toFixed(2)} spent). ` +
+          "Raise IDEACHECKER_BUDGET_USD or delete budget.json to continue.",
+      ),
+      { status: 429 },
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — research: Claude searches the web for competitors, funding, and
@@ -44,6 +102,7 @@ async function researchIdea(idea) {
   const allContent = [];
   let response;
   for (let round = 0; round < 6; round++) {
+    assertBudget();
     response = await client.messages.create({
       model: MODEL,
       max_tokens: 16000,
@@ -51,6 +110,7 @@ async function researchIdea(idea) {
       tools: RESEARCH_TOOLS,
       messages,
     });
+    recordUsage(response.usage);
     allContent.push(...response.content);
     if (response.stop_reason !== "pause_turn") break;
     // Server-side tool loop paused; resend to let it resume where it left off.
@@ -176,6 +236,7 @@ amounts, and facts it contains. Score conservatively; 9-10 should be rare.
 If the brief lacks data on something, say so honestly rather than inventing facts.`;
 
 async function structureReport(idea, brief) {
+  assertBudget();
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 16000,
@@ -188,6 +249,7 @@ async function structureReport(idea, brief) {
       },
     ],
   });
+  recordUsage(response.usage);
   if (response.stop_reason === "refusal") {
     throw Object.assign(new Error("The model declined to evaluate this idea."), {
       status: 422,
@@ -317,6 +379,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "GET" && url.pathname === "/api/budget") {
+    return send(res, 200, {
+      live: hasApiKey,
+      spent_usd: Number(spentUsd.toFixed(4)),
+      limit_usd: BUDGET_USD,
+      remaining_usd: Number(Math.max(0, BUDGET_USD - spentUsd).toFixed(4)),
+    });
+  }
+
   if (req.method === "GET") {
     const file = url.pathname === "/" ? "/index.html" : url.pathname;
     const filePath = path.join(here, "public", path.normalize(file));
@@ -339,7 +410,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`IdeaChecker running at http://localhost:${PORT}`);
-  if (!hasApiKey) {
+  if (hasApiKey) {
+    console.log(
+      `Budget cap: $${BUDGET_USD.toFixed(2)} (spent so far: $${spentUsd.toFixed(2)})`,
+    );
+  } else {
     console.log("No ANTHROPIC_API_KEY found — running in demo mode with sample data.");
   }
 });

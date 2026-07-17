@@ -31,6 +31,26 @@ Two-stage agent pipeline (`server.js`):
 Source URLs are collected from the web-search result blocks and returned with
 the report.
 
+## Budget cap
+
+Total API spend is hard-capped at **$4 by default**. The server computes the
+real cost of every API call from the response's usage data (input/output
+tokens, cache tokens, and web searches at $10/1k) and persists the running
+total to `budget.json` (gitignored), so the cap survives restarts. Once the
+cap is reached, live analyses return HTTP 429 until you raise the cap or reset
+the file:
+
+```bash
+export IDEACHECKER_BUDGET_USD=10   # raise the cap
+rm budget.json                     # or reset the spend counter
+```
+
+Current spend is visible at `GET /api/budget` and in the UI under the idea box.
+A typical live analysis costs roughly $0.10–$0.30, so $4 covers on the order of
+15–40 idea checks. (Note: concurrent requests are each checked against the cap
+when they start, so simultaneous analyses can overshoot it by at most one
+in-flight analysis.)
+
 ## Run it
 
 ```bash
