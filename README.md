@@ -1,13 +1,35 @@
 # IdeaChecker
 
-An AI agent that gives your startup or business idea an honest, investor-grade
-evaluation. Powered by Claude.
+An AI research agent that evaluates startup and business ideas. Pitch an idea
+and the agent researches the live market with web search, then tells you
+straight whether it's good — and what you're up against.
 
-Enter an idea and get back:
+Every report includes:
 
 - A **verdict** (promising / needs work / risky) with a one-line assessment
-- **Scores** out of 10 for feasibility, market, originality, and monetization
+- **Scores** out of 10 for market, feasibility, originality, and monetization
+- **Market reality** — how many people/companies have already built this, and
+  how saturated the space is
+- **Competitors** — who they are, what they do, **who raised money** (amounts,
+  rounds, status: active / acquired / shut down)
+- **Difficulty** — how easy it is to build, estimated time to MVP, and the key
+  challenges
 - Specific **strengths**, **risks**, and suggested **next steps**
+- **Sources** — links found during research
+
+## How it works
+
+Two-stage agent pipeline (`server.js`):
+
+1. **Research** — Claude (`claude-opus-4-8`) runs live web search + web fetch
+   (server-side tools, including `pause_turn` continuation handling) to find
+   competitors, funding rounds, shutdowns, and difficulty signals, and writes a
+   research brief.
+2. **Structure** — a second call converts the brief into a strict JSON report
+   via structured outputs, so responses always match the expected schema.
+
+Source URLs are collected from the web-search result blocks and returned with
+the report.
 
 ## Run it
 
@@ -17,12 +39,11 @@ export ANTHROPIC_API_KEY=sk-ant-...   # optional — without it the app runs in 
 npm start
 ```
 
-Then open http://localhost:3000.
+Then open http://localhost:3000. A full live analysis typically takes 1–2
+minutes (real web research). Override the model with `IDEACHECKER_MODEL`.
 
-Without an API key the app serves a canned demo analysis so the UI is fully
-explorable; with a key it calls Claude (`claude-opus-4-8` by default, override
-with `IDEACHECKER_MODEL`) using structured outputs, so responses always match
-the expected schema.
+Without an API key the app serves a clearly-labeled sample report so the UI is
+fully explorable.
 
 ## Stack
 

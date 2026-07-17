@@ -30,13 +30,9 @@
     align-items: center;
     padding: 3rem 1.25rem 4rem;
   }
-  main { width: 100%; max-width: 680px; }
+  main { width: 100%; max-width: 720px; }
   header { text-align: center; margin-bottom: 2rem; }
-  .logo {
-    font-size: 2rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
+  .logo { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
   .logo .spark { color: var(--accent); }
   .tagline { color: var(--muted); margin-top: 0.4rem; }
 
@@ -75,9 +71,12 @@
     font-weight: 600;
     padding: 0.7rem 1.5rem;
     cursor: pointer;
+    white-space: nowrap;
   }
   button:hover { background: var(--accent-strong); }
   button:disabled { opacity: 0.55; cursor: wait; }
+  #progress { display: none; margin-top: 0.9rem; color: var(--muted); font-size: 0.9rem; }
+  #progress.visible { display: block; }
 
   #results { margin-top: 1.5rem; display: none; }
   #results.visible { display: block; }
@@ -121,7 +120,7 @@
   .meter { height: 6px; border-radius: 3px; background: #2a2f3d; overflow: hidden; }
   .meter > div { height: 100%; border-radius: 3px; background: var(--accent); }
 
-  .section { margin-top: 1.4rem; }
+  .section { margin-top: 1.5rem; }
   .section h3 {
     font-size: 0.85rem;
     letter-spacing: 0.08em;
@@ -142,6 +141,62 @@
   .section.risks li { border-left-color: var(--bad); }
   .section.suggestions li { border-left-color: var(--warn); }
 
+  .fact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+  }
+  @media (max-width: 560px) { .fact-grid { grid-template-columns: 1fr; } }
+  .fact {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+  }
+  .fact .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .fact .val { margin-top: 0.3rem; font-weight: 600; line-height: 1.4; }
+  .fact .sub { margin-top: 0.35rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+  }
+  .pill.low, .pill.easy { background: rgba(111,191,143,0.15); color: var(--good); }
+  .pill.medium, .pill.moderate { background: rgba(224,180,92,0.15); color: var(--warn); }
+  .pill.high, .pill.hard, .pill.very-hard { background: rgba(217,123,108,0.15); color: var(--bad); }
+  .market-summary { margin-top: 0.8rem; color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
+
+  .competitor {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+  }
+  .competitor + .competitor { margin-top: 0.6rem; }
+  .competitor .top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
+  .competitor .name { font-weight: 700; }
+  .competitor .status {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    border-radius: 999px; padding: 0.15rem 0.55rem;
+  }
+  .status.active { background: rgba(111,191,143,0.15); color: var(--good); }
+  .status.acquired { background: rgba(126,166,224,0.15); color: #7ea6e0; }
+  .status.shut-down { background: rgba(217,123,108,0.15); color: var(--bad); }
+  .status.unknown { background: rgba(154,161,178,0.15); color: var(--muted); }
+  .competitor .desc { margin-top: 0.35rem; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+  .competitor .funding { margin-top: 0.4rem; font-size: 0.88rem; color: var(--accent-strong); font-weight: 600; }
+
+  .challenges { margin-top: 0.8rem; }
+  .challenges li { border-left-color: var(--bad); }
+
+  .sources a { color: var(--accent-strong); text-decoration: none; word-break: break-all; }
+  .sources a:hover { text-decoration: underline; }
+  .sources li { font-size: 0.88rem; }
+
   #error {
     display: none;
     margin-top: 1rem;
@@ -151,50 +206,84 @@
     border-radius: 10px;
     padding: 0.8rem 1rem;
   }
-  footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.8rem; }
+  footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.8rem; text-align: center; }
 </style>
 </head>
 <body>
 <main>
   <header>
     <div class="logo">Idea<span class="spark">Checker</span></div>
-    <p class="tagline">Pitch your idea. Get an honest, investor-grade read in seconds.</p>
+    <p class="tagline">Pitch your idea. The agent researches the market and gives you the honest truth.</p>
   </header>
 
   <div class="card">
     <textarea id="idea" placeholder="Describe your startup or business idea… e.g. 'A subscription service that delivers pre-portioned meal kits for people with specific food allergies.'"></textarea>
     <div class="row">
-      <span class="hint" id="hint">Powered by Claude</span>
+      <span class="hint">Live web research: competitors, funding, difficulty</span>
       <button id="check">Check my idea</button>
     </div>
+    <div id="progress">🔎 Researching the market — finding competitors, funding rounds, and sizing up difficulty. This can take a minute or two…</div>
     <div id="error"></div>
   </div>
 
   <div id="results" class="card" aria-live="polite">
     <div class="verdict-row">
       <span id="badge" class="badge"></span>
-      <span id="demo-tag" class="demo-tag" hidden>demo mode — set ANTHROPIC_API_KEY for live analysis</span>
+      <span id="demo-tag" class="demo-tag" hidden>demo mode — set ANTHROPIC_API_KEY for live web research</span>
     </div>
     <p class="one-liner" id="one-liner"></p>
     <div class="scores" id="scores"></div>
+
+    <div class="section">
+      <h3>Market reality</h3>
+      <div class="fact-grid">
+        <div class="fact">
+          <div class="label">Who's built this already</div>
+          <div class="val" id="how-many"></div>
+        </div>
+        <div class="fact">
+          <div class="label">Saturation</div>
+          <div class="val"><span id="saturation" class="pill"></span></div>
+        </div>
+      </div>
+      <p class="market-summary" id="market-summary"></p>
+    </div>
+
+    <div class="section">
+      <h3>Competitors &amp; who raised money</h3>
+      <div id="competitors"></div>
+    </div>
+
+    <div class="section">
+      <h3>How hard is it to build</h3>
+      <div class="fact-grid">
+        <div class="fact">
+          <div class="label">Difficulty</div>
+          <div class="val"><span id="difficulty-level" class="pill"></span></div>
+        </div>
+        <div class="fact">
+          <div class="label">Time to MVP</div>
+          <div class="val" id="time-to-mvp"></div>
+        </div>
+      </div>
+      <ul class="challenges" id="challenges"></ul>
+    </div>
+
     <div class="section strengths"><h3>Strengths</h3><ul id="strengths"></ul></div>
     <div class="section risks"><h3>Risks</h3><ul id="risks"></ul></div>
     <div class="section suggestions"><h3>Next steps</h3><ul id="suggestions"></ul></div>
+    <div class="section sources"><h3>Sources</h3><ul id="sources"></ul></div>
   </div>
 
-  <footer>IdeaChecker evaluates feasibility, market, originality &amp; monetization.</footer>
+  <footer>IdeaChecker researches competitors, funding, market saturation &amp; build difficulty — then tells you straight.</footer>
 </main>
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const VERDICT_LABELS = {
-    promising: "Promising",
-    "needs-work": "Needs work",
-    risky: "Risky",
-  };
+  const VERDICT_LABELS = { promising: "Promising", "needs-work": "Needs work", risky: "Risky" };
   const SCORE_LABELS = {
-    feasibility: "Feasibility",
     market: "Market",
+    feasibility: "Feasibility",
     originality: "Originality",
     monetization: "Monetization",
   };
@@ -204,6 +293,48 @@
       ...items.map((text) => {
         const li = document.createElement("li");
         li.textContent = text;
+        return li;
+      }),
+    );
+  }
+
+  function renderCompetitors(list) {
+    const wrap = $("competitors");
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "market-summary";
+      p.textContent = "No direct competitors found — verify with your own search before assuming a green field.";
+      wrap.replaceChildren(p);
+      return;
+    }
+    wrap.replaceChildren(
+      ...list.map((c) => {
+        const div = document.createElement("div");
+        div.className = "competitor";
+        div.innerHTML =
+          '<div class="top"><span class="name"></span><span class="status"></span></div>' +
+          '<div class="desc"></div><div class="funding"></div>';
+        div.querySelector(".name").textContent = c.name;
+        const st = div.querySelector(".status");
+        st.textContent = c.status.replace("-", " ");
+        st.classList.add(c.status);
+        div.querySelector(".desc").textContent = c.description;
+        div.querySelector(".funding").textContent = "💰 " + c.funding;
+        return div;
+      }),
+    );
+  }
+
+  function renderSources(list) {
+    $("sources").replaceChildren(
+      ...list.map((s) => {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = s.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = s.title;
+        li.appendChild(a);
         return li;
       }),
     );
@@ -219,7 +350,8 @@
       return;
     }
     btn.disabled = true;
-    btn.textContent = "Analyzing…";
+    btn.textContent = "Researching…";
+    $("progress").classList.add("visible");
     try {
       const res = await fetch("/api/check", {
         method: "POST",
@@ -248,9 +380,25 @@
         }),
       );
 
+      $("how-many").textContent = data.market_reality.how_many_built_it;
+      const sat = $("saturation");
+      sat.textContent = data.market_reality.saturation + " saturation";
+      sat.className = "pill " + data.market_reality.saturation;
+      $("market-summary").textContent = data.market_reality.summary;
+
+      renderCompetitors(data.competitors);
+
+      const lvl = $("difficulty-level");
+      lvl.textContent = data.difficulty.level.replace("-", " ");
+      lvl.className = "pill " + data.difficulty.level;
+      $("time-to-mvp").textContent = data.difficulty.time_to_mvp;
+      renderList($("challenges"), data.difficulty.key_challenges);
+
       renderList($("strengths"), data.strengths);
       renderList($("risks"), data.risks);
       renderList($("suggestions"), data.suggestions);
+      renderSources(data.sources || []);
+
       $("results").classList.add("visible");
       $("results").scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (err) {
@@ -259,6 +407,7 @@
     } finally {
       btn.disabled = false;
       btn.textContent = "Check my idea";
+      $("progress").classList.remove("visible");
     }
   }
 
