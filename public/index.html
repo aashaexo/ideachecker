@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IdeaChecker</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-2: #1d212d;
+    --border: #2a2f3d;
+    --text: #e8eaf0;
+    --muted: #9aa1b2;
+    --accent: #e8956b;
+    --accent-strong: #f0a97f;
+    --good: #6fbf8f;
+    --warn: #e0b45c;
+    --bad: #d97b6c;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.25rem 4rem;
+  }
+  main { width: 100%; max-width: 680px; }
+  header { text-align: center; margin-bottom: 2rem; }
+  .logo {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .logo .spark { color: var(--accent); }
+  .tagline { color: var(--muted); margin-top: 0.4rem; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.4rem;
+  }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font: inherit;
+    padding: 0.9rem 1rem;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.9rem;
+    gap: 1rem;
+  }
+  .hint { color: var(--muted); font-size: 0.85rem; }
+  button {
+    background: var(--accent);
+    color: #1c1208;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    padding: 0.7rem 1.5rem;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-strong); }
+  button:disabled { opacity: 0.55; cursor: wait; }
+
+  #results { margin-top: 1.5rem; display: none; }
+  #results.visible { display: block; }
+
+  .verdict-row { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+  .badge {
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+  }
+  .badge.promising { background: rgba(111,191,143,0.15); color: var(--good); }
+  .badge.needs-work { background: rgba(224,180,92,0.15); color: var(--warn); }
+  .badge.risky { background: rgba(217,123,108,0.15); color: var(--bad); }
+  .demo-tag {
+    font-size: 0.75rem;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+  }
+  .one-liner { margin-top: 0.9rem; font-size: 1.05rem; line-height: 1.5; }
+
+  .scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1.3rem;
+  }
+  .score {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 0.9rem;
+  }
+  .score .label { color: var(--muted); font-size: 0.8rem; }
+  .score .value { font-size: 1.4rem; font-weight: 700; margin: 0.2rem 0 0.45rem; }
+  .score .value small { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+  .meter { height: 6px; border-radius: 3px; background: #2a2f3d; overflow: hidden; }
+  .meter > div { height: 100%; border-radius: 3px; background: var(--accent); }
+
+  .section { margin-top: 1.4rem; }
+  .section h3 {
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+  }
+  .section ul { list-style: none; padding: 0; display: grid; gap: 0.5rem; }
+  .section li {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    line-height: 1.45;
+  }
+  .section.strengths li { border-left-color: var(--good); }
+  .section.risks li { border-left-color: var(--bad); }
+  .section.suggestions li { border-left-color: var(--warn); }
+
+  #error {
+    display: none;
+    margin-top: 1rem;
+    color: var(--bad);
+    background: rgba(217,123,108,0.1);
+    border: 1px solid rgba(217,123,108,0.4);
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+  }
+  footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo">Idea<span class="spark">Checker</span></div>
+    <p class="tagline">Pitch your idea. Get an honest, investor-grade read in seconds.</p>
+  </header>
+
+  <div class="card">
+    <textarea id="idea" placeholder="Describe your startup or business idea… e.g. 'A subscription service that delivers pre-portioned meal kits for people with specific food allergies.'"></textarea>
+    <div class="row">
+      <span class="hint" id="hint">Powered by Claude</span>
+      <button id="check">Check my idea</button>
+    </div>
+    <div id="error"></div>
+  </div>
+
+  <div id="results" class="card" aria-live="polite">
+    <div class="verdict-row">
+      <span id="badge" class="badge"></span>
+      <span id="demo-tag" class="demo-tag" hidden>demo mode — set ANTHROPIC_API_KEY for live analysis</span>
+    </div>
+    <p class="one-liner" id="one-liner"></p>
+    <div class="scores" id="scores"></div>
+    <div class="section strengths"><h3>Strengths</h3><ul id="strengths"></ul></div>
+    <div class="section risks"><h3>Risks</h3><ul id="risks"></ul></div>
+    <div class="section suggestions"><h3>Next steps</h3><ul id="suggestions"></ul></div>
+  </div>
+
+  <footer>IdeaChecker evaluates feasibility, market, originality &amp; monetization.</footer>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const VERDICT_LABELS = {
+    promising: "Promising",
+    "needs-work": "Needs work",
+    risky: "Risky",
+  };
+  const SCORE_LABELS = {
+    feasibility: "Feasibility",
+    market: "Market",
+    originality: "Originality",
+    monetization: "Monetization",
+  };
+
+  function renderList(el, items) {
+    el.replaceChildren(
+      ...items.map((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        return li;
+      }),
+    );
+  }
+
+  async function check() {
+    const idea = $("idea").value.trim();
+    const btn = $("check");
+    $("error").style.display = "none";
+    if (!idea) {
+      $("error").textContent = "Describe your idea first.";
+      $("error").style.display = "block";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Analyzing…";
+    try {
+      const res = await fetch("/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Analysis failed");
+
+      $("badge").className = "badge " + data.verdict;
+      $("badge").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
+      $("demo-tag").hidden = !data.demo;
+      $("one-liner").textContent = data.one_liner;
+
+      $("scores").replaceChildren(
+        ...Object.entries(SCORE_LABELS).map(([key, label]) => {
+          const value = data.scores[key];
+          const div = document.createElement("div");
+          div.className = "score";
+          div.innerHTML =
+            '<div class="label"></div><div class="value"><span></span> <small>/ 10</small></div><div class="meter"><div></div></div>';
+          div.querySelector(".label").textContent = label;
+          div.querySelector(".value span").textContent = value;
+          div.querySelector(".meter > div").style.width = value * 10 + "%";
+          return div;
+        }),
+      );
+
+      renderList($("strengths"), data.strengths);
+      renderList($("risks"), data.risks);
+      renderList($("suggestions"), data.suggestions);
+      $("results").classList.add("visible");
+      $("results").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (err) {
+      $("error").textContent = err.message;
+      $("error").style.display = "block";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Check my idea";
+    }
+  }
+
+  $("check").addEventListener("click", check);
+  $("idea").addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") check();
+  });
+</script>
+</body>
+</html>

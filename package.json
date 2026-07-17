@@ -1,0 +1,16 @@
+{
+  "name": "ideachecker",
+  "version": "0.1.0",
+  "description": "AI agent that evaluates startup and business ideas using Claude",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
