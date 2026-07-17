@@ -46,10 +46,15 @@ rm budget.json                     # or reset the spend counter
 ```
 
 Current spend is visible at `GET /api/budget` and in the UI under the idea box.
-A typical live analysis costs roughly $0.10–$0.30, so $4 covers on the order of
-15–40 idea checks. (Note: concurrent requests are each checked against the cap
-when they start, so simultaneous analyses can overshoot it by at most one
-in-flight analysis.)
+
+**Per-check ceiling:** each individual analysis is also capped (default
+**$0.50**, via `IDEACHECKER_MAX_PER_CHECK_USD`). If the research phase hits the
+ceiling, the agent stops searching and builds the report from what it already
+found — so a single check can never run away with your credits. A typical live
+analysis costs roughly $0.10–$0.30, so $4 covers on the order of 15–40 idea
+checks. (Note: concurrent requests are each checked against the cap when they
+start, so simultaneous analyses can overshoot it by at most one in-flight
+analysis.)
 
 ## Run it
 

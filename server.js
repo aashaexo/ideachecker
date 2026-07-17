@@ -21,6 +21,9 @@ const client = hasApiKey ? new Anthropic() : null;
 // ---------------------------------------------------------------------------
 
 const BUDGET_USD = Number(process.env.IDEACHECKER_BUDGET_USD || 4);
+// Per-analysis ceiling: research stops early once one check has spent this
+// much, and finishes the report with whatever it found so far.
+const PER_CHECK_USD = Number(process.env.IDEACHECKER_MAX_PER_CHECK_USD || 0.5);
 const BUDGET_FILE = path.join(here, "budget.json");
 
 // Per-million-token pricing for claude-opus-4-8; web search is $10 per 1,000
@@ -100,12 +103,21 @@ async function researchIdea(idea) {
     { role: "user", content: `Research this startup idea:\n\n${idea}` },
   ];
   const allContent = [];
+  const startSpent = spentUsd;
   let response;
   for (let round = 0; round < 6; round++) {
     assertBudget();
+    // Per-check ceiling: stop researching once this analysis has cost enough,
+    // and build the report from what we have instead of burning more rounds.
+    if (spentUsd - startSpent >= PER_CHECK_USD) {
+      console.log(
+        `per-check cap hit ($${(spentUsd - startSpent).toFixed(2)}) — finishing with current research`,
+      );
+      break;
+    }
     response = await client.messages.create({
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 8000,
       system: RESEARCH_SYSTEM,
       tools: RESEARCH_TOOLS,
       messages,
@@ -239,7 +251,7 @@ async function structureReport(idea, brief) {
   assertBudget();
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: 8000,
     system: STRUCTURE_SYSTEM,
     output_config: { format: { type: "json_schema", schema: REPORT_SCHEMA } },
     messages: [
