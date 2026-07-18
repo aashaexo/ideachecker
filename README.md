@@ -1,77 +1,101 @@
-# IdeaChecker
+# IdeaChecker 💡
 
-An AI research agent that evaluates startup and business ideas. Pitch an idea
-and the agent researches the live market with web search, then tells you
-straight whether it's good — and what you're up against.
+An open-source AI research agent that tells you the truth about your startup
+idea. Pitch an idea, and the agent deep-researches the live web — then reports
+whether it's good, **who already built it**, **who raised money**, and **how
+hard it is to pull off**.
 
-Every report includes:
+Built on the [Parallel](https://parallel.ai) Task API: one research task per
+check, at a flat price of a few cents.
 
-- A **verdict** (promising / needs work / risky) with a one-line assessment
-- **Scores** out of 10 for market, feasibility, originality, and monetization
-- **Market reality** — how many people/companies have already built this, and
-  how saturated the space is
-- **Competitors** — who they are, what they do, **who raised money** (amounts,
-  rounds, status: active / acquired / shut down)
-- **Difficulty** — how easy it is to build, estimated time to MVP, and the key
-  challenges
-- Specific **strengths**, **risks**, and suggested **next steps**
-- **Sources** — links found during research
+## What you get for every idea
+
+- ✅ **Verdict** — promising / needs work / risky, with a blunt one-liner
+- 📊 **Scores** out of 10 — market, feasibility, originality, monetization
+- 🌍 **Market reality** — how many companies/people already built this, and how
+  saturated the space is
+- 🏢 **Competitors** — who they are, what they do, funding raised (round, year,
+  investors), and status (active / acquired / shut down)
+- 🔨 **Difficulty** — how hard it is to build, time to MVP, key challenges
+- 💪 **Strengths**, ⚠️ **risks**, and 🎯 **next steps** — specific to your idea
+- 🔗 **Sources** — citations from the live research
+
+## Quickstart
+
+```bash
+git clone https://github.com/aashaexo/ideachecker
+cd ideachecker
+npm install
+
+cp .env.example .env        # add your PARALLEL_API_KEY (https://platform.parallel.ai)
+export $(grep -v '^#' .env | xargs)
+
+npm start                   # → http://localhost:3000
+```
+
+No API key? The app runs in **demo mode** with clearly-labeled sample data so
+you can explore the UI first.
 
 ## How it works
 
-Two-stage agent pipeline (`server.js`):
-
-1. **Research** — Claude (`claude-opus-4-8`) runs live web search + web fetch
-   (server-side tools, including `pause_turn` continuation handling) to find
-   competitors, funding rounds, shutdowns, and difficulty signals, and writes a
-   research brief.
-2. **Structure** — a second call converts the brief into a strict JSON report
-   via structured outputs, so responses always match the expected schema.
-
-Source URLs are collected from the web-search result blocks and returned with
-the report.
-
-## Budget cap
-
-Total API spend is hard-capped at **$4 by default**. The server computes the
-real cost of every API call from the response's usage data (input/output
-tokens, cache tokens, and web searches at $10/1k) and persists the running
-total to `budget.json` (gitignored), so the cap survives restarts. Once the
-cap is reached, live analyses return HTTP 429 until you raise the cap or reset
-the file:
-
-```bash
-export IDEACHECKER_BUDGET_USD=10   # raise the cap
-rm budget.json                     # or reset the spend counter
+```
+idea ──► Parallel Task API (deep web research + structured output) ──► report
+              │
+              └── searches the live web for competitors, funding
+                  rounds, shutdowns, and difficulty signals;
+                  returns schema-validated JSON with per-field citations
 ```
 
-Current spend is visible at `GET /api/budget` and in the UI under the idea box.
+The whole agent is one Parallel task run per check (`server.js`). The task
+carries a JSON output schema, so the report always comes back structured —
+competitors, funding, scores — with citations attached to each field, which
+the app surfaces as sources. Free-text categorical fields are normalized
+server-side so the UI always renders cleanly.
 
-**Per-check ceiling:** each individual analysis is also capped (default
-**$0.50**, via `IDEACHECKER_MAX_PER_CHECK_USD`). If the research phase hits the
-ceiling, the agent stops searching and builds the report from what it already
-found — so a single check can never run away with your credits. A typical live
-analysis costs roughly $0.10–$0.30, so $4 covers on the order of 15–40 idea
-checks. (Note: concurrent requests are each checked against the cap when they
-start, so simultaneous analyses can overshoot it by at most one in-flight
-analysis.)
+## Cost controls
 
-## Run it
+Each check is **one task at a flat, known price** — cost per check is bounded
+by construction:
 
-```bash
-npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # optional — without it the app runs in demo mode
-npm start
-```
+| Processor | Cost per check | Notes |
+|---|---|---|
+| `lite` | ~$0.005 | Fastest, shallowest |
+| `base` | ~$0.01 | Quick checks |
+| `core` | ~$0.025 | **Default** — good depth for competitor/funding research |
+| `pro` | ~$0.10 | Deeper research, slower |
+| `ultra` | ~$0.30 | Maximum depth |
 
-Then open http://localhost:3000. A full live analysis typically takes 1–2
-minutes (real web research). Override the model with `IDEACHECKER_MODEL`.
+On top of that, total spend is hard-capped (default **$4**, i.e. ~160 checks
+on `core`). The running total persists to `budget.json` across restarts; once
+the cap is reached the API returns HTTP 429 until you raise
+`IDEACHECKER_BUDGET_USD` or delete `budget.json`. Live spend shows in the UI
+and at `GET /api/budget`.
 
-Without an API key the app serves a clearly-labeled sample report so the UI is
-fully explorable.
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PARALLEL_API_KEY` | — | Your Parallel API key (demo mode if unset) |
+| `PARALLEL_PROCESSOR` | `core` | Research depth / flat cost per check |
+| `IDEACHECKER_BUDGET_USD` | `4` | Hard cap on total spend |
+| `PORT` | `3000` | Server port |
+
+## API
+
+- `POST /api/check` — body `{"idea": "..."}`; returns the full report JSON
+- `GET /api/budget` — current spend, cap, processor, and cost per check
 
 ## Stack
 
-- Plain Node.js HTTP server (`server.js`) — no framework
-- Single-page frontend (`public/index.html`) — no build step
-- [`@anthropic-ai/sdk`](https://github.com/anthropics/anthropic-sdk-typescript) for the Claude API
+- Plain Node.js HTTP server — no framework, ~1 dependency
+- Single-page frontend — no build step
+- [`parallel-web`](https://www.npmjs.com/package/parallel-web) SDK
+
+## Contributing
+
+Issues and PRs welcome. Ideas: report history, shareable report links, batch
+checking, an "ultra deep-dive" mode.
+
+## License
+
+[MIT](LICENSE)

@@ -3,38 +3,39 @@ import { readFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import Anthropic from "@anthropic-ai/sdk";
+import Parallel from "parallel-web";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const MODEL = process.env.IDEACHECKER_MODEL || "claude-opus-4-8";
 
-const hasApiKey = Boolean(
-  process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
-);
-const client = hasApiKey ? new Anthropic() : null;
+// Parallel Task API processor. Higher tiers research deeper and cost more per
+// task: lite < base < core < pro < ultra. "core" is a good default for
+// competitive/funding research.
+const PROCESSOR = process.env.PARALLEL_PROCESSOR || "core";
+
+// Flat price per task run by processor (USD). Used for budget accounting —
+// keep in sync with https://parallel.ai pricing.
+const PROCESSOR_COST = {
+  lite: 0.005,
+  base: 0.01,
+  core: 0.025,
+  pro: 0.1,
+  ultra: 0.3,
+};
+
+const hasApiKey = Boolean(process.env.PARALLEL_API_KEY);
+const client = hasApiKey
+  ? new Parallel({ apiKey: process.env.PARALLEL_API_KEY })
+  : null;
 
 // ---------------------------------------------------------------------------
 // Budget guard — hard cap on cumulative API spend, persisted across restarts.
-// Once the cap is reached, live analyses are refused until the budget is
-// raised (IDEACHECKER_BUDGET_USD) or budget.json is deleted.
+// Each analysis is one Parallel task run at a flat, known price, so cost per
+// check is bounded by construction.
 // ---------------------------------------------------------------------------
 
 const BUDGET_USD = Number(process.env.IDEACHECKER_BUDGET_USD || 4);
-// Per-analysis ceiling: research stops early once one check has spent this
-// much, and finishes the report with whatever it found so far.
-const PER_CHECK_USD = Number(process.env.IDEACHECKER_MAX_PER_CHECK_USD || 0.5);
 const BUDGET_FILE = path.join(here, "budget.json");
-
-// Per-million-token pricing for claude-opus-4-8; web search is $10 per 1,000
-// searches. Web fetch has no per-request fee (tokens only).
-const PRICE = {
-  inputPerM: 5,
-  outputPerM: 25,
-  cacheWritePerM: 6.25,
-  cacheReadPerM: 0.5,
-  perWebSearch: 0.01,
-};
 
 function loadSpent() {
   try {
@@ -45,15 +46,7 @@ function loadSpent() {
 }
 let spentUsd = loadSpent();
 
-function recordUsage(usage) {
-  if (!usage) return;
-  const cost =
-    ((usage.input_tokens || 0) * PRICE.inputPerM +
-      (usage.output_tokens || 0) * PRICE.outputPerM +
-      (usage.cache_creation_input_tokens || 0) * PRICE.cacheWritePerM +
-      (usage.cache_read_input_tokens || 0) * PRICE.cacheReadPerM) /
-      1_000_000 +
-    (usage.server_tool_use?.web_search_requests || 0) * PRICE.perWebSearch;
+function recordSpend(cost) {
   spentUsd += cost;
   try {
     writeFileSync(BUDGET_FILE, JSON.stringify({ spentUsd }, null, 2));
@@ -63,7 +56,8 @@ function recordUsage(usage) {
 }
 
 function assertBudget() {
-  if (spentUsd >= BUDGET_USD) {
+  const perCheck = PROCESSOR_COST[PROCESSOR] ?? 0.1;
+  if (spentUsd + perCheck > BUDGET_USD) {
     throw Object.assign(
       new Error(
         `Budget cap reached ($${spentUsd.toFixed(2)} of $${BUDGET_USD.toFixed(2)} spent). ` +
@@ -75,109 +69,41 @@ function assertBudget() {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 1 — research: Claude searches the web for competitors, funding, and
-// market reality. Server-side tools; may span multiple pause_turn rounds.
+// The research task — one Parallel Task API run does the deep web research
+// and returns the report already shaped by the JSON schema, with per-field
+// citations in the basis.
 // ---------------------------------------------------------------------------
 
-const RESEARCH_SYSTEM = `You are a startup research analyst. Given a startup idea, research the
-competitive landscape thoroughly using web search. You must find:
-1. Existing companies building this or something close — how crowded is the space?
-2. Funding: which of those companies raised money, how much, from whom, and roughly when.
-3. Failures or shutdowns in the space, if notable.
-4. How hard this is to build: technical, regulatory, and go-to-market difficulty.
-5. Anything else that determines whether this idea is good: market size signals,
-   timing, distribution dynamics.
-
-Search for the idea's category and obvious keyword variations, not just the exact
-phrasing. Prefer recent information. When you're done researching, write a dense,
-factual research brief with company names, funding amounts, and dates. Be honest
-about what you could not verify.`;
-
-const RESEARCH_TOOLS = [
-  { type: "web_search_20260209", name: "web_search", max_uses: 8 },
-  { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 },
-];
-
-async function researchIdea(idea) {
-  let messages = [
-    { role: "user", content: `Research this startup idea:\n\n${idea}` },
-  ];
-  const allContent = [];
-  const startSpent = spentUsd;
-  let response;
-  for (let round = 0; round < 6; round++) {
-    assertBudget();
-    // Per-check ceiling: stop researching once this analysis has cost enough,
-    // and build the report from what we have instead of burning more rounds.
-    if (spentUsd - startSpent >= PER_CHECK_USD) {
-      console.log(
-        `per-check cap hit ($${(spentUsd - startSpent).toFixed(2)}) — finishing with current research`,
-      );
-      break;
-    }
-    response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      system: RESEARCH_SYSTEM,
-      tools: RESEARCH_TOOLS,
-      messages,
-    });
-    recordUsage(response.usage);
-    allContent.push(...response.content);
-    if (response.stop_reason !== "pause_turn") break;
-    // Server-side tool loop paused; resend to let it resume where it left off.
-    messages = [...messages, { role: "assistant", content: response.content }];
-  }
-
-  if (response.stop_reason === "refusal") {
-    throw Object.assign(new Error("The model declined to research this idea."), {
-      status: 422,
-    });
-  }
-
-  const brief = allContent
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
-
-  const sources = [];
-  const seen = new Set();
-  for (const block of allContent) {
-    if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
-      for (const r of block.content) {
-        if (r.url && !seen.has(r.url)) {
-          seen.add(r.url);
-          sources.push({ title: r.title || r.url, url: r.url });
-        }
-      }
-    }
-  }
-  return { brief, sources };
-}
-
-// ---------------------------------------------------------------------------
-// Stage 2 — structure: turn the research brief into a strict JSON report.
-// (Separate call because citations from search results don't combine with
-// structured output in a single request.)
-// ---------------------------------------------------------------------------
-
-const SCORE = { type: "integer", enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] };
+const desc = (description) => ({ type: "string", description });
 
 const REPORT_SCHEMA = {
   type: "object",
   properties: {
-    verdict: { type: "string", enum: ["promising", "needs-work", "risky"] },
-    one_liner: {
-      type: "string",
-      description: "One blunt sentence: is this idea good or not, and why",
-    },
+    verdict: desc(
+      "Overall call on the idea. Exactly one of: promising, needs-work, risky",
+    ),
+    one_liner: desc(
+      "One blunt sentence: is this idea good or not, and the main reason why",
+    ),
     scores: {
       type: "object",
       properties: {
-        market: SCORE,
-        feasibility: SCORE,
-        originality: SCORE,
-        monetization: SCORE,
+        market: {
+          type: "integer",
+          description: "Market opportunity score from 1 (tiny/shrinking) to 10 (huge/growing)",
+        },
+        feasibility: {
+          type: "integer",
+          description: "How feasible it is to build and launch, 1 (nearly impossible) to 10 (trivial)",
+        },
+        originality: {
+          type: "integer",
+          description: "How original vs. crowded, 1 (fully commoditized) to 10 (genuinely novel)",
+        },
+        monetization: {
+          type: "integer",
+          description: "How clear the path to revenue is, 1 (no path) to 10 (obvious and proven)",
+        },
       },
       required: ["market", "feasibility", "originality", "monetization"],
       additionalProperties: false,
@@ -185,29 +111,30 @@ const REPORT_SCHEMA = {
     market_reality: {
       type: "object",
       properties: {
-        how_many_built_it: {
-          type: "string",
-          description:
-            "How many companies/people have built this or something close, e.g. 'At least 12 direct competitors, dozens of adjacent tools'",
-        },
-        saturation: { type: "string", enum: ["low", "medium", "high"] },
-        summary: { type: "string" },
+        how_many_built_it: desc(
+          "How many companies or people have already built this or something close, with numbers where possible, e.g. 'At least 12 direct competitors and dozens of adjacent tools'",
+        ),
+        saturation: desc("Market saturation level. Exactly one of: low, medium, high"),
+        summary: desc(
+          "2-3 sentences on the real state of this market based on the research",
+        ),
       },
       required: ["how_many_built_it", "saturation", "summary"],
       additionalProperties: false,
     },
     competitors: {
       type: "array",
+      description:
+        "Real companies found in research that built this or something close, including failed ones — they carry the most signal",
       items: {
         type: "object",
         properties: {
-          name: { type: "string" },
-          description: { type: "string" },
-          funding: {
-            type: "string",
-            description: "e.g. '$42M Series B (2024, a16z)' or 'Bootstrapped' or 'Unknown'",
-          },
-          status: { type: "string", enum: ["active", "acquired", "shut-down", "unknown"] },
+          name: desc("Company name"),
+          description: desc("What they do, one sentence"),
+          funding: desc(
+            "Funding raised with round, year, and lead investors where known, e.g. '$42M Series B (2024, a16z)', or 'Bootstrapped' or 'Unknown'",
+          ),
+          status: desc("Exactly one of: active, acquired, shut-down, unknown"),
         },
         required: ["name", "description", "funding", "status"],
         additionalProperties: false,
@@ -216,16 +143,32 @@ const REPORT_SCHEMA = {
     difficulty: {
       type: "object",
       properties: {
-        level: { type: "string", enum: ["easy", "moderate", "hard", "very-hard"] },
-        time_to_mvp: { type: "string", description: "e.g. '2-3 months for a solo dev'" },
-        key_challenges: { type: "array", items: { type: "string" } },
+        level: desc("How hard to build. Exactly one of: easy, moderate, hard, very-hard"),
+        time_to_mvp: desc("Realistic time to a working MVP, e.g. '2-3 months for a solo dev'"),
+        key_challenges: {
+          type: "array",
+          description: "The 3-5 hardest problems: technical, regulatory, or go-to-market",
+          items: { type: "string" },
+        },
       },
       required: ["level", "time_to_mvp", "key_challenges"],
       additionalProperties: false,
     },
-    strengths: { type: "array", items: { type: "string" } },
-    risks: { type: "array", items: { type: "string" } },
-    suggestions: { type: "array", items: { type: "string" } },
+    strengths: {
+      type: "array",
+      description: "3-5 specific strengths of this idea, grounded in the research",
+      items: { type: "string" },
+    },
+    risks: {
+      type: "array",
+      description: "3-5 specific risks, grounded in what happened to others in this space",
+      items: { type: "string" },
+    },
+    suggestions: {
+      type: "array",
+      description: "3-5 concrete next steps the founder should take",
+      items: { type: "string" },
+    },
   },
   required: [
     "verdict",
@@ -241,40 +184,95 @@ const REPORT_SCHEMA = {
   additionalProperties: false,
 };
 
-const STRUCTURE_SYSTEM = `You are IdeaChecker, a sharp, honest startup evaluator. You are given a
-startup idea and a research brief compiled from live web research. Produce a
-structured report grounded in the brief — use the real company names, funding
-amounts, and facts it contains. Score conservatively; 9-10 should be rare.
-If the brief lacks data on something, say so honestly rather than inventing facts.`;
+const TASK_INSTRUCTIONS = `Evaluate this startup idea like a seasoned investor and operator: direct,
+specific, grounded in how markets actually work. Research the competitive
+landscape thoroughly — search the idea's category and keyword variations, not
+just its exact phrasing. Find: existing companies building this or something
+close (how crowded is it?), who raised money (amounts, rounds, investors,
+dates), notable failures or shutdowns, and how hard this is to build
+(technical, regulatory, go-to-market). Score conservatively — 9 or 10 should
+be rare. Strengths, risks, and suggestions must be specific to this idea,
+never generic filler. If something could not be verified, say so honestly.
 
-async function structureReport(idea, brief) {
-  assertBudget();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8000,
-    system: STRUCTURE_SYSTEM,
-    output_config: { format: { type: "json_schema", schema: REPORT_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `IDEA:\n${idea}\n\nRESEARCH BRIEF:\n${brief}`,
-      },
-    ],
-  });
-  recordUsage(response.usage);
-  if (response.stop_reason === "refusal") {
-    throw Object.assign(new Error("The model declined to evaluate this idea."), {
-      status: 422,
-    });
-  }
-  const textBlock = response.content.find((b) => b.type === "text");
-  return JSON.parse(textBlock.text);
+STARTUP IDEA TO EVALUATE:
+`;
+
+// Normalize free-text enum-ish fields so the UI's badge/pill classes always
+// get a known value even if the model phrases it differently.
+function pick(value, allowed, fallback) {
+  const v = String(value || "").toLowerCase().trim().replace(/\s+/g, "-");
+  return allowed.includes(v) ? v : fallback;
 }
+const clampScore = (n) => Math.min(10, Math.max(1, Math.round(Number(n) || 5)));
 
 async function analyzeIdea(idea) {
-  const { brief, sources } = await researchIdea(idea);
-  const report = await structureReport(idea, brief);
-  return { ...report, sources };
+  assertBudget();
+
+  const run = await client.taskRun.create({
+    input: TASK_INSTRUCTIONS + idea,
+    processor: PROCESSOR,
+    task_spec: {
+      output_schema: { type: "json", json_schema: REPORT_SCHEMA },
+    },
+    metadata: { app: "ideachecker" },
+  });
+  recordSpend(PROCESSOR_COST[PROCESSOR] ?? 0.1);
+
+  // Blocks server-side until the run completes; deep research can take a few
+  // minutes on higher processors.
+  const result = await client.taskRun.result(
+    run.run_id,
+    { timeout: 600 },
+    { timeout: 660_000 },
+  );
+
+  if (result.output?.type !== "json" || !result.output.content) {
+    throw new Error("Unexpected task output format");
+  }
+  const r = result.output.content;
+
+  // Collect deduped citations from the per-field basis.
+  const sources = [];
+  const seen = new Set();
+  for (const fb of result.output.basis || []) {
+    for (const c of fb.citations || []) {
+      if (c.url && !seen.has(c.url)) {
+        seen.add(c.url);
+        sources.push({ title: c.title || c.url, url: c.url });
+      }
+    }
+  }
+
+  return {
+    verdict: pick(r.verdict, ["promising", "needs-work", "risky"], "needs-work"),
+    one_liner: String(r.one_liner || ""),
+    scores: {
+      market: clampScore(r.scores?.market),
+      feasibility: clampScore(r.scores?.feasibility),
+      originality: clampScore(r.scores?.originality),
+      monetization: clampScore(r.scores?.monetization),
+    },
+    market_reality: {
+      how_many_built_it: String(r.market_reality?.how_many_built_it || "Unknown"),
+      saturation: pick(r.market_reality?.saturation, ["low", "medium", "high"], "medium"),
+      summary: String(r.market_reality?.summary || ""),
+    },
+    competitors: (Array.isArray(r.competitors) ? r.competitors : []).map((c) => ({
+      name: String(c.name || "Unknown"),
+      description: String(c.description || ""),
+      funding: String(c.funding || "Unknown"),
+      status: pick(c.status, ["active", "acquired", "shut-down", "unknown"], "unknown"),
+    })),
+    difficulty: {
+      level: pick(r.difficulty?.level, ["easy", "moderate", "hard", "very-hard"], "moderate"),
+      time_to_mvp: String(r.difficulty?.time_to_mvp || "Unknown"),
+      key_challenges: (r.difficulty?.key_challenges || []).map(String),
+    },
+    strengths: (r.strengths || []).map(String),
+    risks: (r.risks || []).map(String),
+    suggestions: (r.suggestions || []).map(String),
+    sources: sources.slice(0, 12),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +292,7 @@ function demoAnalysis(idea) {
         "Roughly 10-15 direct competitors and dozens of adjacent tools (sample estimate)",
       saturation: "medium",
       summary:
-        "Several funded players already serve the broad market; the openings are underserved niches and distribution angles they ignore. (Demo data — run with an API key for live research.)",
+        "Several funded players already serve the broad market; the openings are underserved niches and distribution angles they ignore. (Demo data — set PARALLEL_API_KEY for live research.)",
     },
     competitors: [
       {
@@ -394,6 +392,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/budget") {
     return send(res, 200, {
       live: hasApiKey,
+      processor: PROCESSOR,
+      cost_per_check_usd: PROCESSOR_COST[PROCESSOR] ?? null,
       spent_usd: Number(spentUsd.toFixed(4)),
       limit_usd: BUDGET_USD,
       remaining_usd: Number(Math.max(0, BUDGET_USD - spentUsd).toFixed(4)),
@@ -424,9 +424,13 @@ server.listen(PORT, () => {
   console.log(`IdeaChecker running at http://localhost:${PORT}`);
   if (hasApiKey) {
     console.log(
-      `Budget cap: $${BUDGET_USD.toFixed(2)} (spent so far: $${spentUsd.toFixed(2)})`,
+      `Processor: ${PROCESSOR} (~$${PROCESSOR_COST[PROCESSOR] ?? "?"}/check) | ` +
+        `budget: $${spentUsd.toFixed(2)} of $${BUDGET_USD.toFixed(2)} spent`,
     );
   } else {
-    console.log("No ANTHROPIC_API_KEY found — running in demo mode with sample data.");
+    console.log(
+      "No PARALLEL_API_KEY found — running in demo mode with sample data. " +
+        "Get a key at https://platform.parallel.ai",
+    );
   }
 });

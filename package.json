@@ -1,16 +1,21 @@
 {
   "name": "ideachecker",
   "version": "0.1.0",
-  "description": "AI agent that evaluates startup and business ideas using Claude",
+  "description": "Open-source AI agent that researches and evaluates startup ideas using the Parallel API",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.1"
-  },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "parallel-web": "^1.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aashaexo/ideachecker"
   }
 }

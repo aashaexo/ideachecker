@@ -219,7 +219,7 @@
   <div class="card">
     <textarea id="idea" placeholder="Describe your startup or business idea… e.g. 'A subscription service that delivers pre-portioned meal kits for people with specific food allergies.'"></textarea>
     <div class="row">
-      <span class="hint" id="hint">Live web research: competitors, funding, difficulty</span>
+      <span class="hint" id="hint">Live web research via Parallel — competitors, funding, difficulty</span>
       <button id="check">Check my idea</button>
     </div>
     <div id="progress">🔎 Researching the market — finding competitors, funding rounds, and sizing up difficulty. This can take a minute or two…</div>
@@ -229,7 +229,7 @@
   <div id="results" class="card" aria-live="polite">
     <div class="verdict-row">
       <span id="badge" class="badge"></span>
-      <span id="demo-tag" class="demo-tag" hidden>demo mode — set ANTHROPIC_API_KEY for live web research</span>
+      <span id="demo-tag" class="demo-tag" hidden>demo mode — set PARALLEL_API_KEY for live web research</span>
     </div>
     <p class="one-liner" id="one-liner"></p>
     <div class="scores" id="scores"></div>
@@ -275,7 +275,7 @@
     <div class="section sources"><h3>Sources</h3><ul id="sources"></ul></div>
   </div>
 
-  <footer>IdeaChecker researches competitors, funding, market saturation &amp; build difficulty — then tells you straight.</footer>
+  <footer>IdeaChecker researches competitors, funding, market saturation &amp; build difficulty — then tells you straight. Open source · powered by <a href="https://parallel.ai" style="color:var(--accent-strong);text-decoration:none">Parallel</a>.</footer>
 </main>
 
 <script>
