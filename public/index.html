@@ -4,37 +4,47 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>IdeaChecker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #0f1117;
-    --panel: #171a23;
-    --panel-2: #1d212d;
-    --border: #2a2f3d;
-    --text: #e8eaf0;
-    --muted: #9aa1b2;
-    --accent: #e8956b;
-    --accent-strong: #f0a97f;
-    --good: #6fbf8f;
-    --warn: #e0b45c;
-    --bad: #d97b6c;
+    --bg: #000000;
+    --panel: #0c0c0c;
+    --panel-2: #161616;
+    --border: #2b2b2b;
+    --text: #ffffff;
+    --muted: #999999;
     font-size: 16px;
   }
   * { box-sizing: border-box; margin: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    font-family: "Inter", system-ui, sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 3rem 1.25rem 4rem;
+    padding: 3.5rem 1.25rem 4rem;
   }
   main { width: 100%; max-width: 720px; }
-  header { text-align: center; margin-bottom: 2rem; }
-  .logo { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
-  .logo .spark { color: var(--accent); }
-  .tagline { color: var(--muted); margin-top: 0.4rem; }
+  header { text-align: center; margin-bottom: 2.2rem; }
+  .logo {
+    font-family: "Instrument Serif", serif;
+    font-size: 3.4rem;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    color: #ffffff;
+    line-height: 1.05;
+  }
+  .tagline {
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    color: var(--muted);
+    margin-top: 0.6rem;
+    font-size: 1.15rem;
+  }
 
   .card {
     background: var(--panel);
@@ -53,28 +63,28 @@
     font: inherit;
     padding: 0.9rem 1rem;
   }
-  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea::placeholder { color: #6a6a6a; }
+  textarea:focus { outline: 2px solid #ffffff; outline-offset: -1px; }
   .row {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     margin-top: 0.9rem;
     gap: 1rem;
   }
-  .hint { color: var(--muted); font-size: 0.85rem; }
   button {
-    background: var(--accent);
-    color: #1c1208;
+    background: #ffffff;
+    color: #000000;
     border: 0;
     border-radius: 10px;
     font: inherit;
     font-weight: 600;
-    padding: 0.7rem 1.5rem;
+    padding: 0.7rem 1.6rem;
     cursor: pointer;
     white-space: nowrap;
   }
-  button:hover { background: var(--accent-strong); }
-  button:disabled { opacity: 0.55; cursor: wait; }
+  button:hover { background: #d9d9d9; }
+  button:disabled { opacity: 0.5; cursor: wait; }
   #progress { display: none; margin-top: 0.9rem; color: var(--muted); font-size: 0.9rem; }
   #progress.visible { display: block; }
 
@@ -83,16 +93,15 @@
 
   .verdict-row { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
   .badge {
-    font-weight: 700;
+    font-weight: 600;
     font-size: 0.85rem;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    padding: 0.35rem 0.8rem;
+    padding: 0.35rem 0.9rem;
     border-radius: 999px;
+    background: #ffffff;
+    color: #000000;
   }
-  .badge.promising { background: rgba(111,191,143,0.15); color: var(--good); }
-  .badge.needs-work { background: rgba(224,180,92,0.15); color: var(--warn); }
-  .badge.risky { background: rgba(217,123,108,0.15); color: var(--bad); }
   .demo-tag {
     font-size: 0.75rem;
     color: var(--muted);
@@ -100,7 +109,12 @@
     border-radius: 999px;
     padding: 0.25rem 0.7rem;
   }
-  .one-liner { margin-top: 0.9rem; font-size: 1.05rem; line-height: 1.5; }
+  .one-liner {
+    font-family: "Instrument Serif", serif;
+    margin-top: 1rem;
+    font-size: 1.35rem;
+    line-height: 1.45;
+  }
 
   .scores {
     display: grid;
@@ -115,31 +129,35 @@
     padding: 0.8rem 0.9rem;
   }
   .score .label { color: var(--muted); font-size: 0.8rem; }
-  .score .value { font-size: 1.4rem; font-weight: 700; margin: 0.2rem 0 0.45rem; }
-  .score .value small { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
-  .meter { height: 6px; border-radius: 3px; background: #2a2f3d; overflow: hidden; }
-  .meter > div { height: 100%; border-radius: 3px; background: var(--accent); }
+  .score .value {
+    font-family: "Instrument Serif", serif;
+    font-size: 1.7rem;
+    font-weight: 400;
+    margin: 0.15rem 0 0.45rem;
+  }
+  .score .value small { font-size: 0.85rem; color: var(--muted); font-family: "Inter", sans-serif; }
+  .meter { height: 5px; border-radius: 3px; background: #262626; overflow: hidden; }
+  .meter > div { height: 100%; border-radius: 3px; background: #ffffff; }
 
-  .section { margin-top: 1.5rem; }
+  .section { margin-top: 1.6rem; }
   .section h3 {
-    font-size: 0.85rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 0.6rem;
+    font-family: "Instrument Serif", serif;
+    font-size: 1.25rem;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    color: #ffffff;
+    margin-bottom: 0.7rem;
   }
   .section ul { list-style: none; padding: 0; display: grid; gap: 0.5rem; }
   .section li {
     background: var(--panel-2);
     border: 1px solid var(--border);
-    border-left: 3px solid var(--border);
+    border-left: 2px solid #ffffff;
     border-radius: 8px;
     padding: 0.65rem 0.9rem;
-    line-height: 1.45;
+    line-height: 1.5;
+    font-size: 0.93rem;
   }
-  .section.strengths li { border-left-color: var(--good); }
-  .section.risks li { border-left-color: var(--bad); }
-  .section.suggestions li { border-left-color: var(--warn); }
 
   .fact-grid {
     display: grid;
@@ -153,22 +171,20 @@
     border-radius: 10px;
     padding: 0.85rem 1rem;
   }
-  .fact .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
-  .fact .val { margin-top: 0.3rem; font-weight: 600; line-height: 1.4; }
-  .fact .sub { margin-top: 0.35rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .fact .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .fact .val { margin-top: 0.35rem; font-weight: 500; line-height: 1.45; font-size: 0.95rem; }
   .pill {
     display: inline-block;
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    border: 1px solid #ffffff;
+    color: #ffffff;
     border-radius: 999px;
-    padding: 0.2rem 0.6rem;
+    padding: 0.2rem 0.65rem;
   }
-  .pill.low, .pill.easy { background: rgba(111,191,143,0.15); color: var(--good); }
-  .pill.medium, .pill.moderate { background: rgba(224,180,92,0.15); color: var(--warn); }
-  .pill.high, .pill.hard, .pill.very-hard { background: rgba(217,123,108,0.15); color: var(--bad); }
-  .market-summary { margin-top: 0.8rem; color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
+  .market-summary { margin-top: 0.85rem; color: var(--muted); line-height: 1.55; font-size: 0.93rem; }
 
   .competitor {
     background: var(--panel-2);
@@ -178,51 +194,54 @@
   }
   .competitor + .competitor { margin-top: 0.6rem; }
   .competitor .top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
-  .competitor .name { font-weight: 700; }
+  .competitor .name { font-weight: 600; }
   .competitor .status {
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    border: 1px solid var(--border); color: var(--muted);
     border-radius: 999px; padding: 0.15rem 0.55rem;
   }
-  .status.active { background: rgba(111,191,143,0.15); color: var(--good); }
-  .status.acquired { background: rgba(126,166,224,0.15); color: #7ea6e0; }
-  .status.shut-down { background: rgba(217,123,108,0.15); color: var(--bad); }
-  .status.unknown { background: rgba(154,161,178,0.15); color: var(--muted); }
-  .competitor .desc { margin-top: 0.35rem; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
-  .competitor .funding { margin-top: 0.4rem; font-size: 0.88rem; color: var(--accent-strong); font-weight: 600; }
+  .competitor .status.active { border-color: #ffffff; color: #ffffff; }
+  .competitor .desc { margin-top: 0.35rem; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+  .competitor .funding { margin-top: 0.45rem; font-size: 0.88rem; color: #ffffff; font-weight: 500; }
 
-  .challenges { margin-top: 0.8rem; }
-  .challenges li { border-left-color: var(--bad); }
+  .challenges { margin-top: 0.85rem; }
 
-  .sources a { color: var(--accent-strong); text-decoration: none; word-break: break-all; }
-  .sources a:hover { text-decoration: underline; }
-  .sources li { font-size: 0.88rem; }
+  .sources a { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border); word-break: break-all; }
+  .sources a:hover { text-decoration-color: #ffffff; }
+  .sources li { font-size: 0.88rem; border-left: 2px solid var(--border); }
 
   #error {
     display: none;
     margin-top: 1rem;
-    color: var(--bad);
-    background: rgba(217,123,108,0.1);
-    border: 1px solid rgba(217,123,108,0.4);
+    color: #ffffff;
+    background: var(--panel-2);
+    border: 1px solid #ffffff;
     border-radius: 10px;
     padding: 0.8rem 1rem;
   }
-  footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+  }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <div class="logo">Idea<span class="spark">Checker</span></div>
+    <div class="logo">IdeaChecker</div>
     <p class="tagline">Pitch your idea. The agent researches the market and gives you the honest truth.</p>
   </header>
 
   <div class="card">
     <textarea id="idea" placeholder="Describe your startup or business idea… e.g. 'A subscription service that delivers pre-portioned meal kits for people with specific food allergies.'"></textarea>
     <div class="row">
-      <span class="hint" id="hint">Live web research via Parallel — competitors, funding, difficulty</span>
       <button id="check">Check my idea</button>
     </div>
-    <div id="progress">🔎 Researching the market — finding competitors, funding rounds, and sizing up difficulty. This can take a minute or two…</div>
+    <div id="progress">Researching the market — finding competitors, funding rounds, and sizing up difficulty. This can take a minute or two…</div>
     <div id="error"></div>
   </div>
 
@@ -266,7 +285,7 @@
           <div class="val" id="time-to-mvp"></div>
         </div>
       </div>
-      <ul class="challenges" id="challenges"></ul>
+      <ul class="challenges section-list" id="challenges"></ul>
     </div>
 
     <div class="section strengths"><h3>Strengths</h3><ul id="strengths"></ul></div>
@@ -275,7 +294,7 @@
     <div class="section sources"><h3>Sources</h3><ul id="sources"></ul></div>
   </div>
 
-  <footer>IdeaChecker researches competitors, funding, market saturation &amp; build difficulty — then tells you straight. Open source · powered by <a href="https://parallel.ai" style="color:var(--accent-strong);text-decoration:none">Parallel</a>.</footer>
+  <footer>Competitors, funding, saturation &amp; difficulty — researched, then told straight.</footer>
 </main>
 
 <script>
@@ -319,7 +338,7 @@
         st.textContent = c.status.replace("-", " ");
         st.classList.add(c.status);
         div.querySelector(".desc").textContent = c.description;
-        div.querySelector(".funding").textContent = "💰 " + c.funding;
+        div.querySelector(".funding").textContent = c.funding;
         return div;
       }),
     );
@@ -361,7 +380,6 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Analysis failed");
 
-      $("badge").className = "badge " + data.verdict;
       $("badge").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
       $("demo-tag").hidden = !data.demo;
       $("one-liner").textContent = data.one_liner;
@@ -381,16 +399,12 @@
       );
 
       $("how-many").textContent = data.market_reality.how_many_built_it;
-      const sat = $("saturation");
-      sat.textContent = data.market_reality.saturation + " saturation";
-      sat.className = "pill " + data.market_reality.saturation;
+      $("saturation").textContent = data.market_reality.saturation + " saturation";
       $("market-summary").textContent = data.market_reality.summary;
 
       renderCompetitors(data.competitors);
 
-      const lvl = $("difficulty-level");
-      lvl.textContent = data.difficulty.level.replace("-", " ");
-      lvl.className = "pill " + data.difficulty.level;
+      $("difficulty-level").textContent = data.difficulty.level.replace("-", " ");
       $("time-to-mvp").textContent = data.difficulty.time_to_mvp;
       renderList($("challenges"), data.difficulty.key_challenges);
 
@@ -408,24 +422,8 @@
       btn.disabled = false;
       btn.textContent = "Check my idea";
       $("progress").classList.remove("visible");
-      refreshBudget();
     }
   }
-
-  async function refreshBudget() {
-    try {
-      const res = await fetch("/api/budget");
-      const b = await res.json();
-      if (b.live) {
-        $("hint").textContent =
-          `Budget: $${b.spent_usd.toFixed(2)} of $${b.limit_usd.toFixed(2)} used` +
-          (b.remaining_usd <= 0 ? " — cap reached" : "");
-      }
-    } catch {
-      /* budget display is best-effort */
-    }
-  }
-  refreshBudget();
 
   $("check").addEventListener("click", check);
   $("idea").addEventListener("keydown", (e) => {
